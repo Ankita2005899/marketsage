@@ -17,7 +17,7 @@ import os, smtplib, random, string, time, requests
 from datetime import timedelta, datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import (
@@ -39,15 +39,18 @@ ALPHAVANTAGE_KEY   = "YOUR_ALPHAVANTAGE_KEY"   # ← replace
 NEWSAPI_KEY        = "YOUR_NEWSAPI_KEY"         # ← replace
 # ─────────────────────────────────────────
 
+
+load_dotenv()
+
 BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-DB_PATH       = os.path.join(BASE_DIR, "marketsage.db")
 
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
-app.config["JWT_SECRET_KEY"]                 = "marketsage-secret-change-in-prod-2025"
+app.config["JWT_SECRET_KEY"]                 = os.getenv("JWT_SECRET_KEY", "marketsage-secret")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"]       = timedelta(hours=24)
-app.config["SQLALCHEMY_DATABASE_URI"]        = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_DATABASE_URI"]        = os.getenv("DATABASE_URL")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 
 CORS(app)
 jwt = JWTManager(app)
@@ -96,8 +99,8 @@ CACHE_TTL_NEWS  = 300   # 5 minutes for news
 
 with app.app_context():
     db.create_all()
-    print("✅  Database ready →", DB_PATH)
-
+    db_url = os.getenv("DATABASE_URL", "not set")
+    print(f"✅  Database ready → {db_url}")
 # ─────────────────────────────────────────
 # MOCK FALLBACK DATA
 # ─────────────────────────────────────────
