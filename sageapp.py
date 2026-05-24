@@ -75,8 +75,8 @@ class User(db.Model):
     password_hash = db.Column(db.LargeBinary, nullable=False)
     verified      = db.Column(db.Boolean, default=False)
     created_at    = db.Column(db.Float, default=time.time)
-    holdings      = db.relationship("Holding", backref="user", lazy=True,
-                                    cascade="all, delete-orphan")
+    holdings  = db.relationship("Holding",   backref="user", lazy=True, cascade="all, delete-orphan")
+    watchlist = db.relationship("Watchlist", backref="user", lazy=True, cascade="all, delete-orphan")
 
 class OTPStore(db.Model):
     __tablename__ = "otp_store"
@@ -94,6 +94,18 @@ class Holding(db.Model):
     qty     = db.Column(db.Float, nullable=False)
     avg     = db.Column(db.Float, nullable=False)
 
+
+
+
+class Watchlist(db.Model):
+    __tablename__ = "watchlist"
+    id       = db.Column(db.Integer, primary_key=True)
+    user_id  = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    sym      = db.Column(db.String(20), nullable=False)
+    added_at = db.Column(db.Float, default=time.time)
+    
+    
+    
 # Simple in-memory price cache — avoids burning Alpha Vantage quota
 # { "AAPL": { "data": {...}, "ts": 1234567890 } }
 _price_cache = {}
@@ -830,6 +842,47 @@ def analyze_sentiment():
             "score": score
         })
     return jsonify({"results": results})
+
+#-------------tire 4 part one (# ROUTES — WATCHLIST)------------------------
+
+
+@app.route("/api/watchlist", methods=["GET"])
+@jwt_required()
+def get_watchlist():
+    email = get_jwt_identity()
+    user  = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"watchlist": []})
+    return jsonify({"watchlist": [{"sym": w.sym, "added_at": w.added_at}
+                                   for w in user.watchlist]})
+
+@app.route("/api/watchlist/add", methods=["POST"])
+@jwt_required()
+def add_watchlist():
+    email = get_jwt_identity()
+    data  = request.get_json()
+    sym   = data.get("sym", "").upper()
+    if not sym:
+        return jsonify({"success": False, "message": "Symbol required."}), 400
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"success": False, "message": "User not found."}), 404
+    existing = Watchlist.query.filter_by(user_id=user.id, sym=sym).first()
+    if existing:
+        return jsonify({"success": False, "message": f"{sym} already in watchlist."}), 409
+    db.session.add(Watchlist(user_id=user.id, sym=sym))
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{sym} added to watchlist!"})
+
+@app.route("/api/watchlist/remove/<sym>", methods=["DELETE"])
+@jwt_required()
+def remove_watchlist(sym):
+    email = get_jwt_identity()
+    user  = User.query.filter_by(email=email).first()
+    if user:
+        Watchlist.query.filter_by(user_id=user.id, sym=sym.upper()).delete()
+        db.session.commit()
+    return jsonify({"success": True, "message": f"{sym} removed from watchlist."})
 
 
     
