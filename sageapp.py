@@ -25,6 +25,8 @@ from flask_jwt_extended import (
 )
 from flask_sqlalchemy import SQLAlchemy
 import bcrypt
+from groq import Groq
+
 
 # ─────────────────────────────────────────
 # ★  CONFIG — paste your real keys here  ★
@@ -658,6 +660,40 @@ def health():
         "alpha_vantage": av_status,
         "newsapi":       na_status,
     })
+
+
+#---------------for tire 3 work  (# ROUTES — AI CHATBOT (Groq/Llama3)   ) -----------------------
+
+
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    data = request.get_json()
+    user_message = data.get("message", "").strip()
+    if not user_message:
+        return jsonify({"success": False, "message": "No message provided."}), 400
+    try:
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are MarketSage AI, an expert stock market analyst and investment advisor. 
+                    You provide clear, concise advice about stocks, investments, and market trends.
+                    Always remind users that your advice is for educational purposes only and not financial advice.
+                    Keep responses under 150 words and be direct and helpful."""
+                },
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=200,
+        )
+        reply = completion.choices[0].message.content
+        return jsonify({"success": True, "reply": reply})
+    except Exception as e:
+        print(f"❌ Groq error: {e}")
+        return jsonify({"success": False, "reply": "AI is temporarily unavailable."}), 500
+    
 
 # ─────────────────────────────────────────
 # MAIN
