@@ -705,24 +705,42 @@ def chat():
 
 def predict_stock_price(symbol: str, days: int = 7):
     try:
-        import yfinance as yf
-        df = yf.download(symbol, period="6mo", interval="1d", progress=False)
-        if df.empty or len(df) < 30:
+        import numpy as np
+        from sklearn.preprocessing import MinMaxScaler
+        from sklearn.linear_model import LinearRegression
+
+        # Use Alpha Vantage instead of yfinance
+        data = _av_get({
+            "function": "TIME_SERIES_DAILY",
+            "symbol": symbol,
+            "outputsize": "compact"
+        })
+
+        if not data or "Time Series (Daily)" not in data:
             return None
-        prices = df['Close'].values.reshape(-1, 1)
+
+        series = data["Time Series (Daily)"]
+        prices = []
+        for date in sorted(series.keys()):
+            prices.append(float(series[date]["4. close"]))
+
+        if len(prices) < 30:
+            return None
+
+        prices = np.array(prices).reshape(-1, 1)
         scaler = MinMaxScaler()
         scaled = scaler.fit_transform(prices)
-        # Create sequences
+
         X, y = [], []
         lookback = 20
         for i in range(lookback, len(scaled)):
             X.append(scaled[i-lookback:i, 0])
             y.append(scaled[i, 0])
         X, y = np.array(X), np.array(y)
-        # Train simple model
+
         model = LinearRegression()
         model.fit(X, y)
-        # Predict next N days
+
         last_seq = scaled[-lookback:, 0].tolist()
         predictions = []
         for _ in range(days):
@@ -730,14 +748,16 @@ def predict_stock_price(symbol: str, days: int = 7):
             pred = model.predict(inp)[0]
             predictions.append(pred)
             last_seq.append(pred)
-        # Inverse transform
+
         pred_prices = scaler.inverse_transform(
             np.array(predictions).reshape(-1, 1)
         ).flatten().tolist()
+
         current_price = float(prices[-1][0])
         target_price  = round(pred_prices[-1], 2)
         change_pct    = round((target_price - current_price) / current_price * 100, 2)
         signal = "BUY" if change_pct > 1.5 else ("SELL" if change_pct < -1.5 else "HOLD")
+
         return {
             "symbol": symbol,
             "current_price": round(current_price, 2),
