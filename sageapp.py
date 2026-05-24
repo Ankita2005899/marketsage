@@ -799,16 +799,24 @@ def get_sentiment_pipeline():
         print("✅ FinBERT loaded!")
     return _sentiment_pipeline
 
-@app.route("/api/sentiment", methods=["POST"])
+@app.route("/api/sentiment", methods=["GET", "POST"])
 def analyze_sentiment():
-    data = request.get_json()
-    texts = data.get("texts", [])
+    if request.method == "GET":
+        # Quick test with default headlines
+        texts = [
+            "NVIDIA stock surges to record high on AI demand",
+            "Meta faces antitrust probe in EU",
+            "Apple reports record quarterly earnings"
+        ]
+    else:
+        data = request.get_json()
+        texts = data.get("texts", [])
     if not texts:
         return jsonify({"error": "No texts provided"}), 400
     try:
         pipe = get_sentiment_pipeline()
         results = []
-        for text in texts[:10]:  # max 10 at a time
+        for text in texts[:10]:
             out = pipe(text[:512])[0]
             results.append({
                 "text": text[:100],
@@ -819,7 +827,6 @@ def analyze_sentiment():
     except Exception as e:
         print(f"❌ FinBERT error: {e}")
         return jsonify({"error": str(e)}), 500
-    
     
     
 # ─────────────────────────────────────────
