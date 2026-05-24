@@ -759,6 +759,49 @@ def lstm_predict(symbol):
         return jsonify({"error": "Could not generate prediction"}), 500
     return jsonify(result)    
 
+
+
+#-----------------tire 3 third work (ROUTES — FINBERT SENTIMENT ANALYSIS)--------------------
+
+
+_sentiment_pipeline = None
+
+def get_sentiment_pipeline():
+    global _sentiment_pipeline
+    if _sentiment_pipeline is None:
+        from transformers import pipeline
+        print("⏳ Loading FinBERT model...")
+        _sentiment_pipeline = pipeline(
+            "text-classification",
+            model="ProsusAI/finbert",
+            return_all_scores=False
+        )
+        print("✅ FinBERT loaded!")
+    return _sentiment_pipeline
+
+@app.route("/api/sentiment", methods=["POST"])
+def analyze_sentiment():
+    data = request.get_json()
+    texts = data.get("texts", [])
+    if not texts:
+        return jsonify({"error": "No texts provided"}), 400
+    try:
+        pipe = get_sentiment_pipeline()
+        results = []
+        for text in texts[:10]:  # max 10 at a time
+            out = pipe(text[:512])[0]
+            results.append({
+                "text": text[:100],
+                "label": out["label"].upper(),
+                "score": round(out["score"], 3)
+            })
+        return jsonify({"results": results})
+    except Exception as e:
+        print(f"❌ FinBERT error: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+    
+    
 # ─────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────
