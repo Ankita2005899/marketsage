@@ -27,6 +27,11 @@ from flask_sqlalchemy import SQLAlchemy
 import bcrypt
 from groq import Groq
 
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LinearRegression
+
 
 # ─────────────────────────────────────────
 # ★  CONFIG — paste your real keys here  ★
@@ -694,6 +699,65 @@ def chat():
         print(f"❌ Groq error: {e}")
         return jsonify({"success": False, "reply": "AI is temporarily unavailable."}), 500
     
+    
+
+# ----------------tire 3 second work (prediction)---------------------------
+
+def predict_stock_price(symbol: str, days: int = 7):
+    try:
+        import yfinance as yf
+        df = yf.download(symbol, period="6mo", interval="1d", progress=False)
+        if df.empty or len(df) < 30:
+            return None
+        prices = df['Close'].values.reshape(-1, 1)
+        scaler = MinMaxScaler()
+        scaled = scaler.fit_transform(prices)
+        # Create sequences
+        X, y = [], []
+        lookback = 20
+        for i in range(lookback, len(scaled)):
+            X.append(scaled[i-lookback:i, 0])
+            y.append(scaled[i, 0])
+        X, y = np.array(X), np.array(y)
+        # Train simple model
+        model = LinearRegression()
+        model.fit(X, y)
+        # Predict next N days
+        last_seq = scaled[-lookback:, 0].tolist()
+        predictions = []
+        for _ in range(days):
+            inp = np.array(last_seq[-lookback:]).reshape(1, -1)
+            pred = model.predict(inp)[0]
+            predictions.append(pred)
+            last_seq.append(pred)
+        # Inverse transform
+        pred_prices = scaler.inverse_transform(
+            np.array(predictions).reshape(-1, 1)
+        ).flatten().tolist()
+        current_price = float(prices[-1][0])
+        target_price  = round(pred_prices[-1], 2)
+        change_pct    = round((target_price - current_price) / current_price * 100, 2)
+        signal = "BUY" if change_pct > 1.5 else ("SELL" if change_pct < -1.5 else "HOLD")
+        return {
+            "symbol": symbol,
+            "current_price": round(current_price, 2),
+            "predicted_price": target_price,
+            "change_pct": change_pct,
+            "signal": signal,
+            "forecast": [round(p, 2) for p in pred_prices],
+            "days": days
+        }
+    except Exception as e:
+        print(f"❌ Prediction error for {symbol}: {e}")
+        return None
+
+@app.route("/api/lstm/<symbol>", methods=["GET"])
+def lstm_predict(symbol):
+    sym = symbol.upper()
+    result = predict_stock_price(sym)
+    if not result:
+        return jsonify({"error": "Could not generate prediction"}), 500
+    return jsonify(result)    
 
 # ─────────────────────────────────────────
 # MAIN
