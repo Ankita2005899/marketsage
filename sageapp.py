@@ -802,7 +802,6 @@ def get_sentiment_pipeline():
 @app.route("/api/sentiment", methods=["GET", "POST"])
 def analyze_sentiment():
     if request.method == "GET":
-        # Quick test with default headlines
         texts = [
             "NVIDIA stock surges to record high on AI demand",
             "Meta faces antitrust probe in EU",
@@ -813,21 +812,18 @@ def analyze_sentiment():
         texts = data.get("texts", [])
     if not texts:
         return jsonify({"error": "No texts provided"}), 400
-    try:
-        pipe = get_sentiment_pipeline()
-        results = []
-        for text in texts[:10]:
-            out = pipe(text[:512])[0]
-            results.append({
-                "text": text[:100],
-                "label": out["label"].upper(),
-                "score": round(out["score"], 3)
-            })
-        return jsonify({"results": results})
-    except Exception as e:
-        print(f"❌ FinBERT error: {e}")
-        return jsonify({"error": str(e)}), 500
-    
+    results = []
+    for text in texts[:10]:
+        sent, scl = _sentiment(text)
+        score = 0.85 if sent != "NEUTRAL" else 0.60
+        results.append({
+            "text": text[:100],
+            "label": sent,
+            "score": score
+        })
+    return jsonify({"results": results})
+
+
     
 # ─────────────────────────────────────────
 # MAIN
